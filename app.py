@@ -2,6 +2,8 @@ import streamlit as st
 import replicate
 import requests
 import os
+from PIL import Image
+from io import BytesIO
 from tqdm import tqdm
 
 # 페이지 기본 설정
@@ -29,6 +31,18 @@ def init_replicate_api():
     except Exception as e:
         st.error(f"API 키 인증 실패: {str(e)}")
         return False
+
+# 이미지 다운로드 및 표시 함수
+def display_image(image_url):
+    try:
+        response = requests.get(image_url)
+        if response.status_code == 200:
+            image = Image.open(BytesIO(response.content))
+            st.image(image, caption="🖼 생성된 이미지", use_column_width=True)
+        else:
+            st.error("이미지를 불러오는 데 실패했습니다.")
+    except Exception as e:
+        st.error(f"이미지 표시 중 오류 발생: {e}")
 
 # 비디오 다운로드 함수
 def download_video(video_url):
@@ -126,7 +140,8 @@ with col1:
         if not prompt:
             st.error("프롬프트를 입력해주세요!")
         else:
-            st.session_state.image_url = "이미지 생성 후 URL"  # 이미지 생성 로직 추가 필요
+            # 여기에서 실제 이미지 생성 API 호출 (현재 더미 URL)
+            st.session_state.image_url = "https://via.placeholder.com/640x640.png"
             st.success("✅ 이미지 생성이 완료되었습니다!")
 
 with col2:
@@ -138,12 +153,12 @@ with col2:
 
 # 결과 표시
 if st.session_state.image_url:
-    st.image(st.session_state.image_url, width=400)
+    display_image(st.session_state.image_url)
 
 if st.session_state.video_url:
     st.video(st.session_state.video_url)
 
-# 비디오 다운로드 버튼 (추가)
+# 비디오 다운로드 버튼 추가
 if st.session_state.video_url:
     video_file = download_video(st.session_state.video_url)
     
