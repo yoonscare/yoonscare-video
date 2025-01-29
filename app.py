@@ -106,29 +106,32 @@ def init_replicate_api():
        return False
 
 def generate_image(prompt, width, height):
-   if not st.session_state.api_key:
-       st.error("API 키를 입력해주세요.")
-       return False
-   
-   try:
-       os.environ["REPLICATE_API_TOKEN"] = st.session_state.api_key.strip()
-       output = replicate.run(
-           "stability-ai/sdxl:2b017d9b67edd2ee1401238df49d75da53c523f36e363881e057f5dc3ed3c5b2",
-           input={
-               "prompt": prompt,
-               "width": width,
-               "height": height,
-           }
-       )
-       
-       if isinstance(output, list) and len(output) > 0:
-           st.session_state.image_url = output[0]
-           return True
-       return False
-           
-   except Exception as e:
-       st.error(f"이미지 생성 실패: {str(e)}")
-       return False
+    if not st.session_state.api_key:
+        st.error("API 키를 입력해주세요.")
+        return False
+    
+    try:
+        # API 토큰 설정
+        token = st.session_state.api_key.strip()
+        client = replicate.Client(api_token=token)
+        
+        output = client.run(
+            "stability-ai/sdxl:2b017d9b67edd2ee1401238df49d75da53c523f36e363881e057f5dc3ed3c5b2",
+            input={
+                "prompt": prompt,
+                "width": width,
+                "height": height,
+            }
+        )
+        
+        if isinstance(output, list) and len(output) > 0:
+            st.session_state.image_url = output[0]
+            return True
+        return False
+            
+    except Exception as e:
+        st.error(f"이미지 생성 실패: {str(e)}")
+        return False
 
 def generate_video(prompt, image_url):
    if not st.session_state.api_key:
@@ -158,20 +161,25 @@ def generate_video(prompt, image_url):
 
 # 사이드바
 with st.sidebar:
-   st.title("⚙️ 설정")
-   api_key = st.text_input(
-       "Replicate API 키",
-       type="password",
-       help="https://replicate.com에서 발급받은 API 키를 입력하세요"
-   ).strip()
-   
-   if api_key:
-       st.session_state.api_key = api_key
-       os.environ["REPLICATE_API_TOKEN"] = api_key
-       if init_replicate_api():
-           st.success("✅ API 키가 확인되었습니다!")
-       else:
-           st.error("❌ 올바르지 않은 API 키입니다.")
+    st.title("⚙️ 설정")
+    api_key = st.text_input(
+        "Replicate API 키",
+        type="password",
+        help="https://replicate.com에서 발급받은 API 키를 입력하세요"
+    )
+    
+    if api_key:
+        # 공백 제거 및 API 키 저장
+        cleaned_key = api_key.strip()
+        st.session_state.api_key = cleaned_key
+        # 환경 변수 설정
+        os.environ["REPLICATE_API_TOKEN"] = cleaned_key
+        
+        try:
+            client = replicate.Client(api_token=cleaned_key)
+            st.success("✅ API 키가 확인되었습니다!")
+        except Exception as e:
+            st.error(f"❌ API 키 인증 실패: {str(e)}")
 
    st.markdown("---")
    st.markdown("### 🎨 이미지 설정")
