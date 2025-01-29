@@ -115,36 +115,94 @@ def generate_image(prompt, width, height):
        return False
 
 def generate_video(prompt, image_url):
-   if not st.session_state.api_key:
-       st.error("API 키를 입력해주세요.")
-       return False
-   
-   try:
-       token = st.session_state.api_key.strip()
-       client = replicate.Client(api_token=token)
-       
-       # 비디오 생성 시도
-       output = client.run(
-           "minimax/video-01-live",
-           input={
-               "prompt": prompt,
-               "first_frame_image": image_url,
-               "num_frames": 50,  # 프레임 수 지정
-               "frame_rate": 30,  # FPS 설정
-           }
-       )
-       
-       if isinstance(output, list) and len(output) > 0:
-           video_url = output[0]
-           st.session_state.video_url = video_url
-           return True
-       return False
-           
-   except Exception as e:
-       st.error(f"비디오 생성 실패: {str(e)}")
-       st.write("상세 오류:", str(e))  # 디버깅용
-       return False
+    if not st.session_state.api_key:
+        st.error("API 키를 입력해주세요.")
+        return False
+    
+    try:
+        with st.status("🎬 비디오 생성 중...", expanded=True) as status:
+            # API 토큰 설정
+            token = st.session_state.api_key.strip()
+            client = replicate.Client(api_token=token)
+            os.environ["REPLICATE_API_TOKEN"] = token
+            
+            status.write("입력 이미지 URL: " + image_url)
+            
+            # 비디오 생성 요청
+            prediction = client.run(
+                "minimax/video-01-live",
+                input={
+                    "prompt": prompt,
+                    "first_frame_image": image_url,
+                    "num_frames": 50,
+                    "interpolation_frames": 5,
+                    "frame_rate": 30
+                }
+            )
+            
+            # 결과 확인
+            if not prediction:
+                status.error("비디오 생성에 실패했습니다.")
+                return False
+            
+            video_url = prediction[0] if isinstance(prediction, list) else prediction
+            
+            # URL 유효성 검사
+            if not video_url or not video_url.startswith(('http://', 'https://')):
+                status.error("올바르지 않은 비디오 URL이 생성되었습니다.")
+                return False
+            
+            # URL 저장
+            st.session_state.video_url = video_url
+            status.update(label="✅ 비디오 생성 완료!", state="complete")
+            return True
+            
+    except Exception as e:
+        st.error(f"비디오 생성 중 오류가 발생했습니다: {str(e)}")
+        st.write("상세 오류:", str(e))
+        return False
 
+# 비디오 표시 및 다운로드 부분
+if st.session_state.video_url:
+    st.markdown("### 3️⃣ 생성된 비디오")
+    video_container = st.container()
+    
+    with video_container:
+        # 비디오 표시
+        st.video(st.session_state.video_url)
+        
+        try:
+            # 비디오 다운로드
+            response = requests.get(st.session_state.video_url, timeout=10)
+            
+            if response.status_code == 200:
+                # 비디오 데이터
+                video_data = response.content
+                
+                # 다운로드 버튼들
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # MP4 다운로드
+                    st.download_button(
+                        label="📥 MP4 다운로드",
+                        data=video_data,
+                        file_name="animation.mp4",
+                        mime="video/mp4",
+                        use_container_width=True
+                    )
+                
+                with col2:
+                    # URL 복사
+                    if st.button("🔗 URL 복사", use_container_width=True):
+                        st.code(st.session_state.video_url)
+                
+                st.success("✅ 비디오가 준비되었습니다. 위 버튼으로 다운로드하실 수 있습니다.")
+            else:
+                st.error(f"비디오 다운로드 실패 (상태 코드: {response.status_code})")
+                
+        except Exception as e:
+            st.error(f"비디오 처리 중 오류 발생: {str(e)}")
 # 사이드바
 with st.sidebar:
    st.title("⚙️ 설정")
