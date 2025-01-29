@@ -94,51 +94,52 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 def init_replicate_api():
-   if not st.session_state.api_key:
-       return False
-   
-   try:
-       os.environ["REPLICATE_API_TOKEN"] = st.session_state.api_key
-       client = replicate.Client(api_token=st.session_state.api_key)
-       return True
-   except Exception as e:
-       st.error(f"API 키 인증 실패: {str(e)}")
-       return False
+    if not st.session_state.api_key:
+        return False
+    
+    try:
+        # API 토큰을 명시적으로 설정
+        os.environ["REPLICATE_API_TOKEN"] = st.session_state.api_key.strip()
+        # Replicate 클라이언트 초기화
+        replicate.Client(api_token=st.session_state.api_key.strip())
+        return True
+    except Exception as e:
+        st.error(f"API 키 인증 실패: {str(e)}")
+        return False
 
 def generate_image(prompt, width, height):
-   if not st.session_state.api_key:
-       st.error("API 키를 입력해주세요.")
-       return False
-   
-   if not prompt:
-       st.error("프롬프트를 입력해주세요.")
-       return False
-   
-   try:
-       os.environ["REPLICATE_API_TOKEN"] = st.session_state.api_key
-       with st.status("🎨 이미지 생성 중...", expanded=True) as status:
-           st.write("이미지를 생성하고 있습니다. 잠시만 기다려주세요...")
-           
-           output = replicate.run(
-               "stability-ai/sdxl:2b017d9b67edd2ee1401238df49d75da53c523f36e363881e057f5dc3ed3c5b2",
-               input={
-                   "prompt": prompt,
-                   "width": width,
-                   "height": height,
-               }
-           )
-           
-           if output and len(output) > 0:
-               st.session_state.image_url = output[0]
-               status.update(label="✅ 이미지 생성 완료!", state="complete")
-               return True
-               
-           status.update(label="❌ 이미지 생성 실패", state="error")
-           return False
-           
-   except Exception as e:
-       st.error(f"이미지 생성 실패: {str(e)}")
-       return False
+    if not st.session_state.api_key:
+        st.error("API 키를 입력해주세요.")
+        return False
+    
+    try:
+        # API 토큰 재설정
+        os.environ["REPLICATE_API_TOKEN"] = st.session_state.api_key.strip()
+        with st.status("🎨 이미지 생성 중...", expanded=True) as status:
+            st.write("이미지를 생성하고 있습니다. 잠시만 기다려주세요...")
+            
+            # API 토큰을 명시적으로 전달
+            client = replicate.Client(api_token=st.session_state.api_key.strip())
+            output = client.run(
+                "stability-ai/sdxl:2b017d9b67edd2ee1401238df49d75da53c523f36e363881e057f5dc3ed3c5b2",
+                input={
+                    "prompt": prompt,
+                    "width": width,
+                    "height": height,
+                }
+            )
+            
+            if output and len(output) > 0:
+                st.session_state.image_url = output[0]
+                status.update(label="✅ 이미지 생성 완료!", state="complete")
+                return True
+            
+            status.update(label="❌ 이미지 생성 실패", state="error")
+            return False
+            
+    except Exception as e:
+        st.error(f"이미지 생성 실패: {str(e)}")
+        return False
 
 def generate_video(prompt, image_url):
    if not st.session_state.api_key:
@@ -173,19 +174,21 @@ def generate_video(prompt, image_url):
 
 # 사이드바
 with st.sidebar:
-   st.title("⚙️ 설정")
-   api_key = st.text_input(
-       "Replicate API 키",
-       type="password",
-       help="https://replicate.com에서 발급받은 API 키를 입력하세요"
-   )
-   
-   if api_key:
-       st.session_state.api_key = api_key
-       if init_replicate_api():
-           st.success("✅ API 키가 확인되었습니다!")
-       else:
-           st.error("❌ 올바르지 않은 API 키입니다.")
+    st.title("⚙️ 설정")
+    api_key = st.text_input(
+        "Replicate API 키",
+        type="password",
+        help="https://replicate.com에서 발급받은 API 키를 입력하세요"
+    ).strip()  # 공백 제거
+    
+    if api_key:
+        st.session_state.api_key = api_key
+        # API 키 저장 및 환경변수 설정
+        os.environ["REPLICATE_API_TOKEN"] = api_key
+        if init_replicate_api():
+            st.success("✅ API 키가 확인되었습니다!")
+        else:
+            st.error("❌ 올바르지 않은 API 키입니다.")
    
    st.markdown("---")
    st.markdown("### 🎨 이미지 설정")
