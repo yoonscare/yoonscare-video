@@ -145,28 +145,46 @@ def generate_video(prompt, image_url):
        
        # 비디오 생성 위치 표시
        video_placeholder = st.empty()
-       video_placeholder.info("🎬 비디오가 여기에 생성됩니다...")
+       video_placeholder.info("🎬 비디오 생성을 시작합니다...")
        
+       # 입력값 로깅
+       st.write("입력 이미지 URL:", image_url)
+       
+       # 비디오 생성 파라미터 설정
+       model_params = {
+           "prompt": prompt,
+           "prompt_optimizer": True,
+           "first_frame_image": image_url,
+           "num_frames": 50,
+           "interpolation_frames": 5,  # 중간 프레임 생성 수
+           "frame_rate": 30  # FPS 설정
+       }
+       
+       # 비디오 생성 시도
        output = client.run(
            "minimax/video-01-live",
-           input={
-               "prompt": prompt,
-               "prompt_optimizer": True,
-               "first_frame_image": image_url,
-               "num_frames": 50
-           }
+           input=model_params
        )
        
-       if isinstance(output, list) and len(output) > 0:
-           st.session_state.video_url = output[0]
-           video_placeholder.success("✅ 비디오 생성이 완료되었습니다!")
-           return True
-           
-       video_placeholder.error("❌ 비디오 생성에 실패했습니다.")
-       return False
+       # 출력값 확인
+       st.write("모델 출력:", output)
+       
+       if output and (isinstance(output, list) and len(output) > 0):
+           video_url = output[0] if isinstance(output, list) else output
+           if video_url and video_url.startswith(('http://', 'https://')):
+               st.session_state.video_url = video_url
+               video_placeholder.success("✅ 비디오 생성이 완료되었습니다!")
+               return True
+           else:
+               video_placeholder.error("❌ 올바르지 않은 비디오 URL이 생성되었습니다.")
+               return False
+       else:
+           video_placeholder.error("❌ 비디오 생성에 실패했습니다. 다시 시도해주세요.")
+           return False
            
    except Exception as e:
-       st.error(f"비디오 생성 실패: {str(e)}")
+       st.error(f"비디오 생성 중 오류가 발생했습니다: {str(e)}")
+       st.write("상세 오류 정보:", e)
        return False
 
 # 사이드바
@@ -213,7 +231,7 @@ with col1:
        if not prompt:
            st.error("프롬프트를 입력해주세요!")
        else:
-           with st.spinner("이미지 생성 중..."):
+           with st.spinner("이미지를 생성하고 있습니다..."):
                success = generate_image(prompt, image_width, image_height)
                if success:
                    st.success("✅ 이미지 생성이 완료되었습니다!")
@@ -222,10 +240,18 @@ with col1:
 with col2:
    if st.button("2️⃣ 비디오 생성", use_container_width=True, 
                disabled=not st.session_state.image_url):
-       with st.spinner("비디오 생성 중..."):
-           success = generate_video(prompt, st.session_state.image_url)
-           if success:
-               st.success("✅ 비디오 생성이 완료되었습니다!")
+       if not st.session_state.image_url:
+           st.error("먼저 이미지를 생성해주세요.")
+       else:
+           with st.spinner("비디오를 생성하고 있습니다. 잠시만 기다려주세요..."):
+               try:
+                   success = generate_video(prompt, st.session_state.image_url)
+                   if success:
+                       st.success("✅ 비디오 생성이 완료되었습니다!")
+                   else:
+                       st.error("❌ 비디오 생성에 실패했습니다. 다시 시도해주세요.")
+               except Exception as e:
+                   st.error(f"비디오 생성 중 오류가 발생했습니다: {str(e)}")
 
 # 결과 표시
 if st.session_state.image_url:
@@ -263,7 +289,6 @@ if st.session_state.video_url:
                            use_container_width=True
                        )
                    with col2:
-                       # 비디오 URL 복사 버튼
                        if st.button("🔗 비디오 URL 복사", use_container_width=True):
                            st.code(st.session_state.video_url)
                    
