@@ -1,170 +1,167 @@
 import streamlit as st
 import replicate
 import requests
-from PIL import Image
-from io import BytesIO
 import time
+import json
 
 # 페이지 기본 설정
 st.set_page_config(
     page_title="AI 애니메이션 생성기",
     page_icon="🎨",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
-# CSS 스타일 적용
+# 상태 초기화
+if 'authentication_status' not in st.session_state:
+    st.session_state.authentication_status = False
+if 'image_url' not in st.session_state:
+    st.session_state.image_url = None
+if 'video_url' not in st.session_state:
+    st.session_state.video_url = None
+
+# CSS
 st.markdown("""
     <style>
     .stApp {
-        background: linear-gradient(135deg, #ffffff, #e6f3ff);
+        background: linear-gradient(135deg, #f0f4f8, #d1e3ff);
     }
-    .main-header {
-        font-family: 'Arial Black', sans-serif;
-        color: #1e3a8a;
-        font-size: 2.5rem;
-        margin-bottom: 2rem;
+    .error {
+        color: red;
+        padding: 10px;
+        border-radius: 5px;
+        background-color: #ffe6e6;
     }
-    .stButton>button {
-        background-color: #2563eb;
-        color: white;
-        border-radius: 10px;
-        padding: 0.5rem 2rem;
-        transition: all 0.3s ease;
-    }
-    .stButton>button:hover {
-        background-color: #1d4ed8;
-        transform: translateY(-2px);
-        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-    }
-    .stTextInput>div>div>input {
-        background-color: white;
-        color: #1f2937;
-    }
-    .stTextArea>div>div>textarea {
-        background-color: white;
-        color: #1f2937;
-        border: 1px solid #e5e7eb;
-    }
-    .stMarkdown {
-        color: #1f2937;
-    }
-    .st-emotion-cache-nahz7x {
-        background-color: white;
-        padding: 2rem;
-        border-radius: 10px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    .success {
+        color: green;
+        padding: 10px;
+        border-radius: 5px;
+        background-color: #e6ffe6;
     }
     </style>
-    """, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
-# 사이드바 설정
+# 사이드바
 with st.sidebar:
     st.title("⚙️ 설정")
-    api_key = st.text_input("Replicate API 키를 입력하세요", type="password")
-    st.caption("API 키는 안전하게 저장되며 세션에서만 사용됩니다.")
+    api_key = st.text_input("Replicate API 키", type="password", key="api_key")
+    
+    if api_key:
+        try:
+            client = replicate.Client(api_token=api_key)
+            st.session_state.authentication_status = True
+            st.success("API 키가 확인되었습니다! ✅")
+        except Exception as e:
+            st.error("API 키 인증에 실패했습니다. 다시 확인해주세요.")
+            st.session_state.authentication_status = False
     
     st.markdown("---")
     st.markdown("### 🎨 이미지 설정")
-    image_width = st.slider("이미지 너비", 384, 1024, 768, 128)
-    image_height = st.slider("이미지 높이", 384, 1024, 768, 128)
-    
-    st.markdown("---")
-    st.markdown("### ℹ️ 도움말")
-    with st.expander("사용 방법"):
-        st.write("""
-        1. API 키를 입력합니다
-        2. 원하는 애니메이션에 대한 설명을 입력합니다
-        3. '생성 시작' 버튼을 클릭합니다
-        4. 잠시 기다리면 이미지와 비디오가 생성됩니다
-        """)
+    image_width = st.slider("너비", 384, 1024, 768, 128)
+    image_height = st.slider("높이", 384, 1024, 768, 128)
 
-# 메인 페이지
-st.markdown("<h1 class='main-header'>🎭 AI 애니메이션 생성기</h1>", unsafe_allow_html=True)
-st.markdown("##### 당신의 상상을 움직이는 애니메이션으로 만들어보세요!")
+# 메인 영역
+st.title("🎭 AI 애니메이션 생성기")
 
 # 프롬프트 입력
 prompt = st.text_area(
-    "애니메이션으로 만들고 싶은 장면을 자세히 설명해주세요",
-    placeholder="예: a young woman with long brown hair laughing, cartoon style, soft lighting",
-    height=100
+    "애니메이션으로 만들고 싶은 장면을 자세히 설명해주세요 (영어로 입력)",
+    height=100,
+    placeholder="예시: Back view of a beautiful woman walking on the beach with sea breeze, cartoon style"
 )
 
-col1, col2, col3 = st.columns([1,2,1])
-with col2:
-    if st.button("✨ 생성 시작", use_container_width=True):
-        if not api_key:
-            st.error("🔑 API 키를 입력해주세요!")
-        elif not prompt:
-            st.error("✍️ 프롬프트를 입력해주세요!")
-        else:
-            try:
-                # API 키 설정
-                replicate.Client(api_token=api_key)
-                
-                with st.status("🎨 AI가 작업중입니다...", expanded=True) as status:
-                    # 1. 이미지 생성
-                    st.write("🖼 첫 프레임 이미지를 생성하고 있습니다...")
-                    image_output = replicate.run(
-                        "stability-ai/sdxl:2b017d9b67edd2ee1401238df49d75da53c523f36e363881e057f5dc3ed3c5b2",
-                        input={
-                            "prompt": prompt,
-                            "width": image_width,
-                            "height": image_height,
-                        }
-                    )
-                    
-                    if image_output:
-                        image_url = image_output[0] if isinstance(image_output, list) else image_output
-                        st.write("✅ 이미지 생성 완료!")
-                        
-                        # 2. 비디오 생성
-                        st.write("🎬 비디오를 생성하고 있습니다...")
-                        video_output = replicate.run(
-                            "minimax/video-01-live",
-                            input={
-                                "prompt": prompt,
-                                "prompt_optimizer": True,
-                                "first_frame_image": str(image_url)
-                            }
-                        )
-                        
-                        if video_output:
-                            video_url = video_output[0] if isinstance(video_output, list) else video_output
-                            status.update(label="✨ 생성 완료!", state="complete")
-                            
-                            # 결과 표시
-                            col_img, col_vid = st.columns(2)
-                            with col_img:
-                                st.markdown("### 🖼 생성된 이미지")
-                                st.image(image_url, use_column_width=True)
-                            
-                            with col_vid:
-                                st.markdown("### 🎬 생성된 비디오")
-                                st.video(video_url)
-                            
-                            # 다운로드 버튼
-                            st.download_button(
-                                label="🎬 비디오 다운로드",
-                                data=requests.get(video_url).content,
-                                file_name="generated_animation.mp4",
-                                mime="video/mp4"
-                            )
-                        else:
-                            st.error("비디오 생성에 실패했습니다.")
-                    else:
-                        st.error("이미지 생성에 실패했습니다.")
-                        
-            except Exception as e:
-                st.error(f"오류가 발생했습니다: {str(e)}")
+# 이미지 생성 함수
+def generate_image():
+    try:
+        with st.status("🎨 이미지 생성 중...", expanded=True) as status:
+            output = replicate.run(
+                "stability-ai/sdxl:2b017d9b67edd2ee1401238df49d75da53c523f36e363881e057f5dc3ed3c5b2",
+                input={
+                    "prompt": prompt,
+                    "width": image_width,
+                    "height": image_height,
+                }
+            )
+            if output and len(output) > 0:
+                st.session_state.image_url = output[0]
+                status.update(label="✅ 이미지 생성 완료!", state="complete")
+                return True
+            return False
+    except Exception as e:
+        st.error(f"이미지 생성 중 오류 발생: {str(e)}")
+        return False
 
-# 페이지 하단
-st.markdown("---")
-st.markdown("### 💡 프롬프트 작성 팁")
-with st.expander("더 나은 결과를 위한 팁"):
+# 비디오 생성 함수
+def generate_video():
+    try:
+        with st.status("🎬 비디오 생성 중...", expanded=True) as status:
+            output = replicate.run(
+                "minimax/video-01-live",
+                input={
+                    "prompt": prompt,
+                    "prompt_optimizer": True,
+                    "first_frame_image": st.session_state.image_url
+                }
+            )
+            if output and len(output) > 0:
+                st.session_state.video_url = output[0]
+                status.update(label="✅ 비디오 생성 완료!", state="complete")
+                return True
+            return False
+    except Exception as e:
+        st.error(f"비디오 생성 중 오류 발생: {str(e)}")
+        return False
+
+# 버튼 컬럼
+col1, col2 = st.columns(2)
+
+with col1:
+    if st.button("1️⃣ 이미지 생성", use_container_width=True, disabled=not st.session_state.authentication_status):
+        if not prompt:
+            st.error("프롬프트를 입력해주세요!")
+        else:
+            success = generate_image()
+            if success:
+                st.session_state.video_url = None  # 새 이미지 생성시 비디오 초기화
+
+with col2:
+    if st.button("2️⃣ 비디오 생성", use_container_width=True, 
+                disabled=not (st.session_state.authentication_status and st.session_state.image_url)):
+        success = generate_video()
+
+# 결과 표시
+if st.session_state.image_url:
+    st.markdown("### 🖼 생성된 이미지")
+    st.image(st.session_state.image_url, use_column_width=True)
+
+if st.session_state.video_url:
+    st.markdown("### 🎬 생성된 비디오")
+    st.video(st.session_state.video_url)
+    
+    # 다운로드 버튼
+    try:
+        video_data = requests.get(st.session_state.video_url).content
+        st.download_button(
+            label="📥 비디오 다운로드",
+            data=video_data,
+            file_name="generated_animation.mp4",
+            mime="video/mp4",
+            use_container_width=True
+        )
+    except Exception as e:
+        st.error("비디오 다운로드 준비 중 오류가 발생했습니다.")
+
+# 초기화 버튼
+if st.session_state.image_url or st.session_state.video_url:
+    if st.button("🔄 처음부터 다시 시작", use_container_width=True):
+        st.session_state.image_url = None
+        st.session_state.video_url = None
+        st.experimental_rerun()
+
+# 도움말
+with st.expander("💡 프롬프트 작성 팁"):
     st.markdown("""
     - 캐릭터의 특징을 자세히 설명해주세요 (머리 색, 표정, 스타일 등)
-    - 원하는 아트 스타일을 명시해주세요 (애니메이션, 만화, 사실적 등)
-    - 장면의 분위기나 감정을 포함시켜주세요
-    - 배경이나 조명에 대한 설명도 추가하면 좋습니다
+    - 원하는 아트 스타일을 명시해주세요 (cartoon style, anime style 등)
+    - 장면의 분위기나 움직임을 포함시켜주세요
+    - 영어로 작성하면 더 좋은 결과를 얻을 수 있습니다
     """)
