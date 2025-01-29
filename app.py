@@ -90,6 +90,12 @@ st.markdown("""
        background-color: #1e293b;
        color: white;
    }
+   .download-section {
+       margin-top: 2rem;
+       padding: 1rem;
+       background: rgba(30, 41, 59, 0.7);
+       border-radius: 10px;
+   }
    </style>
 """, unsafe_allow_html=True)
 
@@ -144,7 +150,6 @@ def generate_video(prompt, image_url):
        with st.status("🎬 비디오 생성 중...", expanded=True) as status:
            status.write("입력 이미지 URL: " + image_url)
            
-           # 직접 API 호출
            output = client.run(
                "minimax/video-01-live",
                input={
@@ -240,55 +245,39 @@ with col2:
 
 # 결과 표시
 if st.session_state.image_url:
-   st.markdown("### 🖼 생성된 이미지")
-   st.image(st.session_state.image_url, width=400)
+   col_img, col_preview = st.columns([1, 2])
+   with col_img:
+       st.markdown("### 🖼 생성된 이미지")
+       st.image(st.session_state.image_url, width=300)
 
 if st.session_state.video_url:
    st.markdown("### 🎬 생성된 비디오")
    try:
        if st.session_state.video_url.startswith(('http://', 'https://')):
-           # 비디오 컨테이너 생성
-           video_container = st.container()
-           with video_container:
-               # 비디오 데이터 다운로드
-               response = requests.get(st.session_state.video_url)
-               if response.status_code == 200:
-                   video_data = response.content
-                   
-                   # 임시 파일로 저장
-                   temp_path = "temp_video.mp4"
-                   with open(temp_path, "wb") as f:
-                       f.write(video_data)
-                   
-                   # 비디오 표시
-                   st.video(temp_path)
-                   
-                   # 다운로드 버튼들
-                   col1, col2 = st.columns(2)
-                   with col1:
-                       st.download_button(
-                           label="📥 MP4 형식으로 다운로드",
-                           data=video_data,
-                           file_name="animation.mp4",
-                           mime="video/mp4",
-                           use_container_width=True
-                       )
-                   with col2:
-                       if st.button("🔗 비디오 URL 복사", use_container_width=True):
-                           st.code(st.session_state.video_url)
-                   
-                   # 비디오 정보 표시
-                   st.info("""
-                   💡 비디오 다운로드 옵션:
-                   - MP4 파일로 직접 다운로드
-                   - URL을 복사하여 나중에 사용
-                   """)
-                   
-                   # 임시 파일 삭제
-                   if os.path.exists(temp_path):
-                       os.remove(temp_path)
-               else:
-                   st.error("비디오 다운로드에 실패했습니다.")
+           # 비디오 데이터 가져오기
+           response = requests.get(st.session_state.video_url)
+           if response.status_code == 200:
+               video_data = response.content
+               
+               # 비디오 표시
+               st.video(st.session_state.video_url)
+               
+               # 다운로드 섹션
+               st.markdown("### 📥 비디오 다운로드")
+               st.download_button(
+                   label="비디오 다운로드 (MP4)",
+                   data=video_data,
+                   file_name="generated_animation.mp4",
+                   mime="video/mp4",
+                   use_container_width=True
+               )
+               
+               # 비디오 URL 표시
+               with st.expander("🔗 비디오 URL"):
+                   st.code(st.session_state.video_url)
+               
+           else:
+               st.error("비디오 다운로드에 실패했습니다.")
        else:
            st.error("유효하지 않은 비디오 URL입니다.")
            
