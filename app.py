@@ -13,14 +13,16 @@ st.set_page_config(
 )
 
 # 상태 초기화
-if 'authentication_status' not in st.session_state:
-   st.session_state.authentication_status = False
+if 'api_key' not in st.session_state:
+   st.session_state.api_key = None
 if 'image_url' not in st.session_state:
    st.session_state.image_url = None
 if 'video_url' not in st.session_state:
    st.session_state.video_url = None
-if 'api_key' not in st.session_state:
-   st.session_state.api_key = None
+
+# 기존 환경 변수 제거
+if "REPLICATE_API_TOKEN" in os.environ:
+   del os.environ["REPLICATE_API_TOKEN"]
 
 # CSS 스타일 적용
 st.markdown("""
@@ -48,7 +50,7 @@ st.markdown("""
        transform: translateY(-2px);
        box-shadow: 0 5px 15px rgba(67, 97, 238, 0.3);
    }
-   .css-1n76uvr {  /* 사이드바 */
+   div[data-testid="stSidebarNav"] {
        background-color: #0f172a;
    }
    .stMarkdown {
@@ -62,40 +64,6 @@ st.markdown("""
        background-color: #1e293b;
        border: 1px solid #334155;
    }
-   .error {
-       background-color: #7f1d1d;
-       color: white;
-       padding: 1rem;
-       border-radius: 0.5rem;
-   }
-   .success {
-       background-color: #064e3b;
-       color: white;
-       padding: 1rem;
-       border-radius: 0.5rem;
-   }
-   .status {
-       background-color: #1e293b;
-       color: white;
-       padding: 1rem;
-       border-radius: 0.5rem;
-       margin: 1rem 0;
-   }
-   .stSlider > div > div > div > div {
-       background-color: #4361ee;
-   }
-   .stTextInput > label {
-       color: white !important;
-   }
-   .stTextArea > label {
-       color: white !important;
-   }
-   .element-container {
-       background-color: #1e293b;
-       padding: 1rem;
-       border-radius: 0.5rem;
-       margin: 1rem 0;
-   }
    .main-header {
        color: white;
        font-size: 2.5em;
@@ -105,93 +73,122 @@ st.markdown("""
        background: rgba(30, 41, 59, 0.7);
        border-radius: 10px;
    }
-   .title {
-       color: white !important;
+   .status-message {
+       padding: 1rem;
+       border-radius: 0.5rem;
+       margin: 1rem 0;
+   }
+   .status-success {
+       background-color: #064e3b;
+       color: white;
+   }
+   .status-error {
+       background-color: #7f1d1d;
+       color: white;
+   }
+   .status-info {
+       background-color: #1e293b;
+       color: white;
    }
    </style>
 """, unsafe_allow_html=True)
 
 def init_replicate_api():
-   try:
-       if st.session_state.api_key:
-           os.environ["REPLICATE_API_TOKEN"] = st.session_state.api_key
-           replicate.Client(api_token=st.session_state.api_key)
-           return True
+   if not st.session_state.api_key:
        return False
+   
+   try:
+       os.environ["REPLICATE_API_TOKEN"] = st.session_state.api_key
+       client = replicate.Client(api_token=st.session_state.api_key)
+       return True
    except Exception as e:
-       st.markdown(f'<p class="error">❌ API 키 인증에 실패했습니다: {str(e)}</p>', unsafe_allow_html=True)
+       st.error(f"API 키 인증 실패: {str(e)}")
        return False
 
-# 이미지 생성 함수
-def generate_image():
-   if not init_replicate_api():
-       st.markdown('<p class="error">❌ API 키를 먼저 설정해주세요.</p>', unsafe_allow_html=True)
+def generate_image(prompt, width, height):
+   if not st.session_state.api_key:
+       st.error("API 키를 입력해주세요.")
        return False
-       
+   
+   if not prompt:
+       st.error("프롬프트를 입력해주세요.")
+       return False
+   
    try:
+       os.environ["REPLICATE_API_TOKEN"] = st.session_state.api_key
        with st.status("🎨 이미지 생성 중...", expanded=True) as status:
-           st.markdown('<p class="status">이미지를 생성하고 있습니다. 잠시만 기다려주세요...</p>', unsafe_allow_html=True)
+           st.write("이미지를 생성하고 있습니다. 잠시만 기다려주세요...")
+           
            output = replicate.run(
                "stability-ai/sdxl:2b017d9b67edd2ee1401238df49d75da53c523f36e363881e057f5dc3ed3c5b2",
                input={
                    "prompt": prompt,
-                   "width": image_width,
-                   "height": image_height,
+                   "width": width,
+                   "height": height,
                }
            )
+           
            if output and len(output) > 0:
                st.session_state.image_url = output[0]
-               st.markdown('<p class="success">✅ 이미지 생성이 완료되었습니다!</p>', unsafe_allow_html=True)
+               status.update(label="✅ 이미지 생성 완료!", state="complete")
                return True
-           st.markdown('<p class="error">❌ 이미지 생성에 실패했습니다.</p>', unsafe_allow_html=True)
+               
+           status.update(label="❌ 이미지 생성 실패", state="error")
            return False
+           
    except Exception as e:
-       st.markdown(f'<p class="error">❌ 오류 발생: {str(e)}</p>', unsafe_allow_html=True)
+       st.error(f"이미지 생성 실패: {str(e)}")
        return False
 
-# 비디오 생성 함수
-def generate_video():
-   if not init_replicate_api():
-       st.markdown('<p class="error">❌ API 키를 먼저 설정해주세요.</p>', unsafe_allow_html=True)
+def generate_video(prompt, image_url):
+   if not st.session_state.api_key:
+       st.error("API 키를 입력해주세요.")
        return False
-       
+   
    try:
+       os.environ["REPLICATE_API_TOKEN"] = st.session_state.api_key
        with st.status("🎬 비디오 생성 중...", expanded=True) as status:
-           st.markdown('<p class="status">비디오를 생성하고 있습니다. 잠시만 기다려주세요...</p>', unsafe_allow_html=True)
+           st.write("비디오를 생성하고 있습니다. 잠시만 기다려주세요...")
+           
            output = replicate.run(
                "minimax/video-01-live",
                input={
                    "prompt": prompt,
                    "prompt_optimizer": True,
-                   "first_frame_image": st.session_state.image_url
+                   "first_frame_image": image_url
                }
            )
+           
            if output and len(output) > 0:
                st.session_state.video_url = output[0]
-               st.markdown('<p class="success">✅ 비디오 생성이 완료되었습니다!</p>', unsafe_allow_html=True)
+               status.update(label="✅ 비디오 생성 완료!", state="complete")
                return True
-           st.markdown('<p class="error">❌ 비디오 생성에 실패했습니다.</p>', unsafe_allow_html=True)
+               
+           status.update(label="❌ 비디오 생성 실패", state="error")
            return False
+           
    except Exception as e:
-       st.markdown(f'<p class="error">❌ 오류 발생: {str(e)}</p>', unsafe_allow_html=True)
+       st.error(f"비디오 생성 실패: {str(e)}")
        return False
 
 # 사이드바
 with st.sidebar:
-   st.markdown("<h2 class='title'>⚙️ 설정</h2>", unsafe_allow_html=True)
-   api_key = st.text_input("Replicate API 키", type="password", key="api_input")
+   st.title("⚙️ 설정")
+   api_key = st.text_input(
+       "Replicate API 키",
+       type="password",
+       help="https://replicate.com에서 발급받은 API 키를 입력하세요"
+   )
    
    if api_key:
        st.session_state.api_key = api_key
        if init_replicate_api():
-           st.markdown('<p class="success">✅ API 키가 확인되었습니다!</p>', unsafe_allow_html=True)
-           st.session_state.authentication_status = True
+           st.success("✅ API 키가 확인되었습니다!")
        else:
-           st.markdown('<p class="error">❌ API 키 인증에 실패했습니다.</p>', unsafe_allow_html=True)
-           st.session_state.authentication_status = False
+           st.error("❌ 올바르지 않은 API 키입니다.")
    
    st.markdown("---")
-   st.markdown("<h3 class='title'>🎨 이미지 설정</h3>", unsafe_allow_html=True)
+   st.markdown("### 🎨 이미지 설정")
    image_width = st.slider("너비", 384, 1024, 768, 128)
    image_height = st.slider("높이", 384, 1024, 768, 128)
 
@@ -209,26 +206,26 @@ prompt = st.text_area(
 col1, col2 = st.columns(2)
 
 with col1:
-   if st.button("1️⃣ 이미지 생성", use_container_width=True, disabled=not st.session_state.authentication_status):
+   if st.button("1️⃣ 이미지 생성", use_container_width=True):
        if not prompt:
-           st.markdown('<p class="error">❌ 프롬프트를 입력해주세요!</p>', unsafe_allow_html=True)
+           st.error("프롬프트를 입력해주세요!")
        else:
-           success = generate_image()
+           success = generate_image(prompt, image_width, image_height)
            if success:
-               st.session_state.video_url = None  # 새 이미지 생성시 비디오 초기화
+               st.session_state.video_url = None
 
 with col2:
    if st.button("2️⃣ 비디오 생성", use_container_width=True, 
-               disabled=not (st.session_state.authentication_status and st.session_state.image_url)):
-       success = generate_video()
+               disabled=not st.session_state.image_url):
+       success = generate_video(prompt, st.session_state.image_url)
 
 # 결과 표시
 if st.session_state.image_url:
-   st.markdown("<h3 class='title'>🖼 생성된 이미지</h3>", unsafe_allow_html=True)
+   st.markdown("### 🖼 생성된 이미지")
    st.image(st.session_state.image_url, use_column_width=True)
 
 if st.session_state.video_url:
-   st.markdown("<h3 class='title'>🎬 생성된 비디오</h3>", unsafe_allow_html=True)
+   st.markdown("### 🎬 생성된 비디오")
    st.video(st.session_state.video_url)
    
    # 다운로드 버튼
@@ -242,7 +239,7 @@ if st.session_state.video_url:
            use_container_width=True
        )
    except Exception as e:
-       st.markdown('<p class="error">❌ 비디오 다운로드 준비 중 오류가 발생했습니다.</p>', unsafe_allow_html=True)
+       st.error("비디오 다운로드 준비 중 오류가 발생했습니다.")
 
 # 초기화 버튼
 if st.session_state.image_url or st.session_state.video_url:
