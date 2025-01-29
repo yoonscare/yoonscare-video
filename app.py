@@ -123,22 +123,26 @@ def generate_video(prompt, image_url):
        token = st.session_state.api_key.strip()
        client = replicate.Client(api_token=token)
        
-       with st.spinner("🎬 비디오를 생성하고 있습니다..."):
-           output = client.run(
-               "minimax/video-01-live",
-               input={
-                   "prompt": prompt,
-                   "first_frame_image": image_url
-               }
-           )
-           
-           if isinstance(output, list) and len(output) > 0:
-               st.session_state.video_url = output[0]
-               return True
-           return False
+       # 비디오 생성 시도
+       output = client.run(
+           "minimax/video-01-live",
+           input={
+               "prompt": prompt,
+               "first_frame_image": image_url,
+               "num_frames": 50,  # 프레임 수 지정
+               "frame_rate": 30,  # FPS 설정
+           }
+       )
+       
+       if isinstance(output, list) and len(output) > 0:
+           video_url = output[0]
+           st.session_state.video_url = video_url
+           return True
+       return False
            
    except Exception as e:
        st.error(f"비디오 생성 실패: {str(e)}")
+       st.write("상세 오류:", str(e))  # 디버깅용
        return False
 
 # 사이드바
@@ -192,33 +196,44 @@ if st.session_state.image_url:
    st.image(st.session_state.image_url, width=400)
    
    if st.button("🎬 비디오 생성", use_container_width=True):
-       success = generate_video(prompt, st.session_state.image_url)
-       if success:
-           st.success("✅ 비디오 생성이 완료되었습니다!")
+       with st.spinner("비디오 생성 중..."):
+           success = generate_video(prompt, st.session_state.image_url)
+           if success:
+               st.success("✅ 비디오 생성 완료!")
+           else:
+               st.error("❌ 비디오 생성 실패")
 
-# 비디오가 생성되었을 때만 표시
+# 비디오 표시 및 다운로드
 if st.session_state.video_url:
    st.markdown("### 3️⃣ 생성된 비디오")
-   st.video(st.session_state.video_url)
    
-   # 비디오 다운로드 섹션
-   st.markdown("### 4️⃣ 비디오 다운로드")
-   try:
-       response = requests.get(st.session_state.video_url)
-       if response.status_code == 200:
-           st.download_button(
-               label="📥 비디오 다운로드 (MP4)",
-               data=response.content,
-               file_name="animation.mp4",
-               mime="video/mp4",
-               use_container_width=True
-           )
+   # 비디오 표시
+   video_container = st.container()
+   with video_container:
+       st.video(st.session_state.video_url)
+       
+       try:
+           # 비디오 데이터 다운로드
+           video_response = requests.get(st.session_state.video_url)
            
-           with st.expander("🔗 비디오 URL"):
-               st.code(st.session_state.video_url)
+           if video_response.status_code == 200:
+               # 다운로드 버튼
+               st.download_button(
+                   label="📥 비디오 다운로드",
+                   data=video_response.content,
+                   file_name="animation.mp4",
+                   mime="video/mp4",
+                   use_container_width=True
+               )
                
-   except Exception as e:
-       st.error("비디오 다운로드 준비 중 오류가 발생했습니다.")
+               # URL 복사 옵션
+               with st.expander("🔗 비디오 URL 복사"):
+                   st.code(st.session_state.video_url)
+                   
+           else:
+               st.error("비디오 다운로드 준비 실패")
+       except Exception as e:
+           st.error(f"비디오 다운로드 중 오류 발생: {str(e)}")
 
 # 초기화 버튼
 if st.session_state.image_url or st.session_state.video_url:
