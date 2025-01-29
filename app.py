@@ -23,6 +23,8 @@ if 'image_url' not in st.session_state:
    st.session_state.image_url = None
 if 'video_url' not in st.session_state:
    st.session_state.video_url = None
+if 'generation_complete' not in st.session_state:
+   st.session_state.generation_complete = False
 
 # CSS 스타일 적용
 st.markdown("""
@@ -56,14 +58,6 @@ st.markdown("""
    .stMarkdown {
        color: #ffffff;
    }
-   .stStatus {
-       background-color: #1e293b;
-       color: white;
-   }
-   .stExpander {
-       background-color: #1e293b;
-       border: 1px solid #334155;
-   }
    .main-header {
        color: white;
        font-size: 2.5em;
@@ -73,28 +67,14 @@ st.markdown("""
        background: rgba(30, 41, 59, 0.7);
        border-radius: 10px;
    }
-   .status-message {
-       padding: 1rem;
-       border-radius: 0.5rem;
+   .result-container {
+       background: rgba(30, 41, 59, 0.7);
+       padding: 2rem;
+       border-radius: 10px;
        margin: 1rem 0;
    }
-   .status-success {
-       background-color: #064e3b;
-       color: white;
-   }
-   .status-error {
-       background-color: #7f1d1d;
-       color: white;
-   }
-   .status-info {
-       background-color: #1e293b;
-       color: white;
-   }
-   .download-section {
+   .video-container {
        margin-top: 2rem;
-       padding: 1rem;
-       background: rgba(30, 41, 59, 0.7);
-       border-radius: 10px;
    }
    </style>
 """, unsafe_allow_html=True)
@@ -147,34 +127,23 @@ def generate_video(prompt, image_url):
        token = st.session_state.api_key.strip()
        client = replicate.Client(api_token=token)
        
-       with st.status("🎬 비디오 생성 중...", expanded=True) as status:
-           status.write("입력 이미지 URL: " + image_url)
-           
-           output = client.run(
-               "minimax/video-01-live",
-               input={
-                   "prompt": prompt,
-                   "first_frame_image": image_url
-               }
-           )
-           
-           status.write("모델 출력: " + str(output))
-           
-           if isinstance(output, list) and len(output) > 0:
-               video_url = output[0]
+       output = client.run(
+           "minimax/video-01-live",
+           input={
+               "prompt": prompt,
+               "first_frame_image": image_url
+           }
+       )
+       
+       if isinstance(output, list) and len(output) > 0:
+           video_url = output[0]
+           if video_url and video_url.startswith(('http://', 'https://')):
                st.session_state.video_url = video_url
+               st.session_state.generation_complete = True
+               return True
                
-               # 비디오 URL 유효성 검사
-               try:
-                   response = requests.head(video_url)
-                   if response.status_code == 200:
-                       status.update(label="✅ 비디오 생성이 완료되었습니다!", state="complete")
-                       return True
-               except:
-                   pass
-                   
-           status.update(label="❌ 비디오 생성에 실패했습니다.", state="error")
-           return False
+       st.error("비디오 생성에 실패했습니다.")
+       return False
            
    except Exception as e:
        st.error(f"비디오 생성 중 오류가 발생했습니다: {str(e)}")
@@ -190,7 +159,6 @@ with st.sidebar:
    )
    
    if api_key:
-       # 공백 제거 및 API 키 저장
        cleaned_key = api_key.strip()
        st.session_state.api_key = cleaned_key
        os.environ["REPLICATE_API_TOKEN"] = cleaned_key
@@ -202,9 +170,9 @@ with st.sidebar:
            st.error(f"❌ API 키 인증 실패: {str(e)}")
    
    st.markdown("---")
-   st.markdown("### 🎨 이미지 설정")
-   image_width = st.slider("너비", 384, 1024, 512, 128)
-   image_height = st.slider("높이", 384, 1024, 512, 128)
+   st.markdown("### 🎨 출력 설정")
+   image_width = st.slider("이미지/영상 너비", 512, 1024, 768, 128)
+   image_height = st.slider("이미지/영상 높이", 512, 1024, 768, 128)
 
 # 메인 영역
 st.markdown("<h1 class='main-header'>🎭 AI 애니메이션 생성기</h1>", unsafe_allow_html=True)
@@ -216,79 +184,66 @@ prompt = st.text_area(
    placeholder="예시: Back view of a beautiful woman walking on the beach with sea breeze, cartoon style"
 )
 
-# 버튼 컬럼
-col1, col2 = st.columns(2)
-
-with col1:
-   if st.button("1️⃣ 이미지 생성", use_container_width=True):
-       if not prompt:
-           st.error("프롬프트를 입력해주세요!")
-       else:
-           with st.spinner("이미지를 생성하고 있습니다..."):
-               success = generate_image(prompt, image_width, image_height)
-               if success:
-                   st.success("✅ 이미지 생성이 완료되었습니다!")
-                   st.session_state.video_url = None
-
-with col2:
-   if st.button("2️⃣ 비디오 생성", use_container_width=True, 
-               disabled=not st.session_state.image_url):
-       if not st.session_state.image_url:
-           st.error("먼저 이미지를 생성해주세요.")
-       else:
-           try:
-               success = generate_video(prompt, st.session_state.image_url)
-               if success:
-                   st.success("✅ 비디오 생성이 완료되었습니다!")
-           except Exception as e:
-               st.error(f"비디오 생성 중 오류가 발생했습니다: {str(e)}")
+# 생성 버튼
+if st.button("✨ 애니메이션 생성 시작", use_container_width=True):
+   if not prompt:
+       st.error("프롬프트를 입력해주세요!")
+   else:
+       st.session_state.generation_complete = False
+       
+       # 이미지 생성
+       with st.status("🎨 이미지 생성 중...", expanded=True) as status:
+           success = generate_image(prompt, image_width, image_height)
+           if success:
+               status.update(label="✅ 이미지 생성 완료!", state="complete")
+               
+               # 비디오 생성
+               status.update(label="🎬 비디오 생성 중...", state="running")
+               video_success = generate_video(prompt, st.session_state.image_url)
+               if video_success:
+                   status.update(label="✅ 애니메이션 생성 완료!", state="complete")
+               else:
+                   status.update(label="❌ 비디오 생성 실패", state="error")
+           else:
+               status.update(label="❌ 이미지 생성 실패", state="error")
 
 # 결과 표시
-if st.session_state.image_url:
-   col_img, col_preview = st.columns([1, 2])
-   with col_img:
-       st.markdown("### 🖼 생성된 이미지")
-       st.image(st.session_state.image_url, width=300)
-
-if st.session_state.video_url:
-   st.markdown("### 🎬 생성된 비디오")
-   try:
-       if st.session_state.video_url.startswith(('http://', 'https://')):
-           # 비디오 데이터 가져오기
-           response = requests.get(st.session_state.video_url)
-           if response.status_code == 200:
-               video_data = response.content
-               
-               # 비디오 표시
-               st.video(st.session_state.video_url)
-               
-               # 다운로드 섹션
-               st.markdown("### 📥 비디오 다운로드")
-               st.download_button(
-                   label="비디오 다운로드 (MP4)",
-                   data=video_data,
-                   file_name="generated_animation.mp4",
-                   mime="video/mp4",
-                   use_container_width=True
-               )
-               
-               # 비디오 URL 표시
-               with st.expander("🔗 비디오 URL"):
-                   st.code(st.session_state.video_url)
-               
-           else:
-               st.error("비디오 다운로드에 실패했습니다.")
-       else:
-           st.error("유효하지 않은 비디오 URL입니다.")
+if st.session_state.image_url and st.session_state.video_url:
+   with st.container():
+       st.markdown("## 🎬 생성된 애니메이션")
+       
+       # 이미지와 비디오를 나란히 표시
+       col1, col2 = st.columns([1, 2])
+       
+       with col1:
+           st.markdown("### 첫 프레임")
+           st.image(st.session_state.image_url, use_column_width=True)
+       
+       with col2:
+           st.markdown("### 생성된 영상")
+           st.video(st.session_state.video_url)
            
-   except Exception as e:
-       st.error(f"비디오 처리 중 오류가 발생했습니다: {str(e)}")
+           # 다운로드 버튼
+           if st.session_state.generation_complete:
+               try:
+                   response = requests.get(st.session_state.video_url)
+                   if response.status_code == 200:
+                       st.download_button(
+                           label="📥 애니메이션 다운로드",
+                           data=response.content,
+                           file_name="animation.mp4",
+                           mime="video/mp4",
+                           use_container_width=True
+                       )
+               except Exception as e:
+                   st.error("비디오 다운로드 준비 중 오류가 발생했습니다.")
 
 # 초기화 버튼
 if st.session_state.image_url or st.session_state.video_url:
    if st.button("🔄 처음부터 다시 시작", use_container_width=True):
        st.session_state.image_url = None
        st.session_state.video_url = None
+       st.session_state.generation_complete = False
        st.experimental_rerun()
 
 # 도움말
