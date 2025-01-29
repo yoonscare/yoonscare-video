@@ -17,25 +17,43 @@ st.set_page_config(
 st.markdown("""
     <style>
     .stApp {
-        background: linear-gradient(to right, #f5f7fa, #c3cfe2);
+        background: linear-gradient(135deg, #ffffff, #e6f3ff);
     }
     .main-header {
         font-family: 'Arial Black', sans-serif;
-        background: -webkit-linear-gradient(45deg, #2c3e50, #3498db);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        color: #1e3a8a;
+        font-size: 2.5rem;
+        margin-bottom: 2rem;
     }
     .stButton>button {
-        background-color: #3498db;
+        background-color: #2563eb;
         color: white;
         border-radius: 10px;
         padding: 0.5rem 2rem;
         transition: all 0.3s ease;
     }
     .stButton>button:hover {
-        background-color: #2980b9;
+        background-color: #1d4ed8;
         transform: translateY(-2px);
-        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    .stTextInput>div>div>input {
+        background-color: white;
+        color: #1f2937;
+    }
+    .stTextArea>div>div>textarea {
+        background-color: white;
+        color: #1f2937;
+        border: 1px solid #e5e7eb;
+    }
+    .stMarkdown {
+        color: #1f2937;
+    }
+    .st-emotion-cache-nahz7x {
+        background-color: white;
+        padding: 2rem;
+        border-radius: 10px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
     }
     </style>
     """, unsafe_allow_html=True)
