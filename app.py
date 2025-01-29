@@ -113,7 +113,6 @@ def generate_image(prompt, width, height):
    try:
        token = st.session_state.api_key.strip()
        client = replicate.Client(api_token=token)
-       os.environ["REPLICATE_API_TOKEN"] = token
        
        output = client.run(
            "stability-ai/sdxl:2b017d9b67edd2ee1401238df49d75da53c523f36e363881e057f5dc3ed3c5b2",
@@ -141,50 +140,39 @@ def generate_video(prompt, image_url):
    try:
        token = st.session_state.api_key.strip()
        client = replicate.Client(api_token=token)
-       os.environ["REPLICATE_API_TOKEN"] = token
        
-       # 비디오 생성 위치 표시
-       video_placeholder = st.empty()
-       video_placeholder.info("🎬 비디오 생성을 시작합니다...")
-       
-       # 입력값 로깅
-       st.write("입력 이미지 URL:", image_url)
-       
-       # 비디오 생성 파라미터 설정
-       model_params = {
-           "prompt": prompt,
-           "prompt_optimizer": True,
-           "first_frame_image": image_url,
-           "num_frames": 50,
-           "interpolation_frames": 5,  # 중간 프레임 생성 수
-           "frame_rate": 30  # FPS 설정
-       }
-       
-       # 비디오 생성 시도
-       output = client.run(
-           "minimax/video-01-live",
-           input=model_params
-       )
-       
-       # 출력값 확인
-       st.write("모델 출력:", output)
-       
-       if output and (isinstance(output, list) and len(output) > 0):
-           video_url = output[0] if isinstance(output, list) else output
-           if video_url and video_url.startswith(('http://', 'https://')):
+       with st.status("🎬 비디오 생성 중...", expanded=True) as status:
+           status.write("입력 이미지 URL: " + image_url)
+           
+           # 직접 API 호출
+           output = client.run(
+               "minimax/video-01-live",
+               input={
+                   "prompt": prompt,
+                   "first_frame_image": image_url
+               }
+           )
+           
+           status.write("모델 출력: " + str(output))
+           
+           if isinstance(output, list) and len(output) > 0:
+               video_url = output[0]
                st.session_state.video_url = video_url
-               video_placeholder.success("✅ 비디오 생성이 완료되었습니다!")
-               return True
-           else:
-               video_placeholder.error("❌ 올바르지 않은 비디오 URL이 생성되었습니다.")
-               return False
-       else:
-           video_placeholder.error("❌ 비디오 생성에 실패했습니다. 다시 시도해주세요.")
+               
+               # 비디오 URL 유효성 검사
+               try:
+                   response = requests.head(video_url)
+                   if response.status_code == 200:
+                       status.update(label="✅ 비디오 생성이 완료되었습니다!", state="complete")
+                       return True
+               except:
+                   pass
+                   
+           status.update(label="❌ 비디오 생성에 실패했습니다.", state="error")
            return False
            
    except Exception as e:
        st.error(f"비디오 생성 중 오류가 발생했습니다: {str(e)}")
-       st.write("상세 오류 정보:", e)
        return False
 
 # 사이드바
@@ -210,8 +198,8 @@ with st.sidebar:
    
    st.markdown("---")
    st.markdown("### 🎨 이미지 설정")
-   image_width = st.slider("너비", 384, 1024, 768, 128)
-   image_height = st.slider("높이", 384, 1024, 768, 128)
+   image_width = st.slider("너비", 384, 1024, 512, 128)
+   image_height = st.slider("높이", 384, 1024, 512, 128)
 
 # 메인 영역
 st.markdown("<h1 class='main-header'>🎭 AI 애니메이션 생성기</h1>", unsafe_allow_html=True)
@@ -243,15 +231,12 @@ with col2:
        if not st.session_state.image_url:
            st.error("먼저 이미지를 생성해주세요.")
        else:
-           with st.spinner("비디오를 생성하고 있습니다. 잠시만 기다려주세요..."):
-               try:
-                   success = generate_video(prompt, st.session_state.image_url)
-                   if success:
-                       st.success("✅ 비디오 생성이 완료되었습니다!")
-                   else:
-                       st.error("❌ 비디오 생성에 실패했습니다. 다시 시도해주세요.")
-               except Exception as e:
-                   st.error(f"비디오 생성 중 오류가 발생했습니다: {str(e)}")
+           try:
+               success = generate_video(prompt, st.session_state.image_url)
+               if success:
+                   st.success("✅ 비디오 생성이 완료되었습니다!")
+           except Exception as e:
+               st.error(f"비디오 생성 중 오류가 발생했습니다: {str(e)}")
 
 # 결과 표시
 if st.session_state.image_url:
