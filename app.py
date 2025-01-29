@@ -12,6 +12,10 @@ st.set_page_config(
     layout="wide"
 )
 
+# 앱 시작시 임시 파일 정리
+if os.path.exists("temp_video.mp4"):
+    os.remove("temp_video.mp4")
+
 # 상태 초기화
 if 'api_key' not in st.session_state:
     st.session_state.api_key = None
@@ -225,13 +229,22 @@ if st.session_state.image_url:
     st.markdown("### 🖼 생성된 이미지")
     st.image(st.session_state.image_url, use_column_width=True)
 
+# 비디오 표시 부분 수정
 if st.session_state.video_url:
     st.markdown("### 🎬 생성된 비디오")
-    st.video(st.session_state.video_url)
-    
-    # 다운로드 버튼
     try:
+        # 비디오 데이터 다운로드
         video_data = requests.get(st.session_state.video_url).content
+        
+        # 임시 파일로 저장
+        temp_path = "temp_video.mp4"
+        with open(temp_path, "wb") as f:
+            f.write(video_data)
+        
+        # 저장된 파일을 스트림릿으로 표시
+        st.video(temp_path)
+        
+        # 다운로드 버튼
         st.download_button(
             label="📥 비디오 다운로드",
             data=video_data,
@@ -239,8 +252,13 @@ if st.session_state.video_url:
             mime="video/mp4",
             use_container_width=True
         )
+        
+        # 임시 파일 삭제
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+            
     except Exception as e:
-        st.error("비디오 다운로드 준비 중 오류가 발생했습니다.")
+        st.error(f"비디오 표시 중 오류가 발생했습니다: {str(e)}")
 
 # 초기화 버튼
 if st.session_state.image_url or st.session_state.video_url:
